@@ -1,4 +1,4 @@
-# k8s-monitoring
+# k8s-monitoring-lab
 
 A complete Kubernetes monitoring stack with Prometheus, Grafana, MongoDB, and MongoDB Exporter.
 
