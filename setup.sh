@@ -28,11 +28,11 @@ echo "[7/10] Waiting for Prometheus pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s
 
 echo "[8/10] Deploying MongoDB app..."
-curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring/main/mongodb.yaml
+curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/mongodb.yaml
 kubectl apply -f mongodb.yaml
 
 echo "[9/10] Installing MongoDB Exporter..."
-curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring/main/values.yaml
+curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/values.yaml
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
 echo "[10/10] Setting up port forwarding (runs in background)..."
