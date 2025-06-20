@@ -2,37 +2,48 @@
 
 set -e
 
-echo "Updating packages and installing Docker..."
-sudo apt-get update -y
-sudo apt-get install -y docker.io
+echo "K8s Monitoring Setup"
+echo "Checking pre-installed tools..."
 
-echo "Enabling and starting Docker..."
-sudo usermod -aG docker $USER
-newgrp docker <<EONG
+# Check what's already installed
+if command -v docker &> /dev/null; then
+    echo "Docker is already installed"
+else
+    echo "Docker not found - this script requires Docker"
+    exit 1
+fi
 
-echo "Docker group updated."
+if command -v kubectl &> /dev/null; then
+    echo "kubectl is already installed"
+else
+    echo "kubectl not found - this script requires kubectl"
+    exit 1
+fi
 
-echo "Installing Minikube..."
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
-rm minikube-linux-amd64
+if command -v helm &> /dev/null; then
+    echo "Helm is already installed"
+else
+    echo "Installing Helm..."
+    curl -sSL https://get.helm.sh/helm-v3.18.3-linux-amd64.tar.gz -o helm.tar.gz
+    tar -zxvf helm.tar.gz
+    sudo mv linux-amd64/helm /usr/local/bin/helm
+    rm -rf linux-amd64 helm.tar.gz
+fi
 
-echo "Installing kubectl..."
-sudo apt-get install -y kubectl
+# Check if Minikube is installed
+if command -v minikube &> /dev/null; then
+    echo "Minikube is already installed"
+else
+    echo "Installing Minikube..."
+    curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+    sudo install minikube-linux-amd64 /usr/local/bin/minikube
+    rm minikube-linux-amd64
+fi
 
 echo "Starting Minikube..."
 minikube start --driver=docker
 
-echo "Aliasing kubectl to Minikube's version..."
-alias kubectl="minikube kubectl --"
-
-echo "Installing Helm..."
-curl -sSL https://get.helm.sh/helm-v3.18.3-linux-amd64.tar.gz -o helm.tar.gz
-tar -zxvf helm.tar.gz
-sudo mv linux-amd64/helm /usr/local/bin/helm
-rm -rf linux-amd64 helm.tar.gz
-
-echo "Adding Prometheus Helm repo and updating..."
+echo "Adding Prometheus Helm repo..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
@@ -42,34 +53,27 @@ helm install prometheus prometheus-community/kube-prometheus-stack
 echo "Waiting for Grafana deployment to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/prometheus-grafana
 
-echo "Downloading MongoDB manifest and values.yaml..."
-curl -LO https://raw.githubusercontent.com/of1r/k8s-monitoring/main/mongodb.yaml
-curl -LO https://raw.githubusercontent.com/of1r/k8s-monitoring/main/values.yaml
-
 echo "Deploying MongoDB..."
 kubectl apply -f mongodb.yaml
 
-echo "Installing MongoDB exporter via Helm..."
+echo "Installing MongoDB exporter..."
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
 echo "Waiting for MongoDB exporter to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/mongodb-exporter-prometheus-mongodb-exporter
 
-echo "Port-forwarding services in the background..."
+echo "Setting up port forwarding..."
 nohup kubectl port-forward deployment/prometheus-grafana 3000:3000 >/dev/null 2>&1 &
 nohup kubectl port-forward service/prometheus-kube-prometheus-prometheus 9090:9090 >/dev/null 2>&1 &
 nohup kubectl port-forward service/mongodb-exporter-prometheus-mongodb-exporter 9216:9216 >/dev/null 2>&1 &
 
-IP=$(curl -s ifconfig.me)
-
 echo ""
-echo "Setup complete. To access the dashboards from your local machine, run this SSH tunnel:"
+echo "Setup complete! Your monitoring stack is ready."
 echo ""
-echo "ssh -L 3000:localhost:3000 -L 9090:localhost:9090 -L 9216:localhost:9216 $USER@$IP"
-echo ""
-echo "Then open these URLs in your browser:"
-echo " - Grafana:    http://localhost:3000"
+echo "Access your dashboards:"
+echo " - Grafana:    http://localhost:3000 (admin/admin)"
 echo " - Prometheus: http://localhost:9090"
 echo " - MongoDB Exporter: http://localhost:9216"
-
-EONG
+echo ""
+echo "Note: Cloud Shell sessions are ephemeral. If you close this session,"
+echo "you'll need to run this setup again."
