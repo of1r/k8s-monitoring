@@ -2,75 +2,74 @@
 
 set -e
 
-echo "==== Updating system ===="
-sudo dnf update -y
+echo "Updating packages and installing Docker..."
+sudo apt-get update -y
+sudo apt-get install -y docker.io
 
-echo "==== Installing dependencies ===="
-sudo dnf install -y curl wget tar unzip conntrack bash-completion git
-
-echo "==== Installing Docker CE ===="
-sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-sudo dnf install -y docker-ce docker-ce-cli containerd.io
-sudo systemctl enable docker
-sudo systemctl start docker
-sudo usermod -aG docker ec2-user
-
-echo "==== Applying docker group immediately ===="
+echo "Enabling and starting Docker..."
+sudo usermod -aG docker $USER
 newgrp docker <<EONG
 
-echo "==== Installing Minikube ===="
-curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube && rm minikube-linux-amd64
+echo "Docker group updated."
 
-echo "==== Starting Minikube ===="
+echo "Installing Minikube..."
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube
+rm minikube-linux-amd64
+
+echo "Installing kubectl..."
+sudo apt-get install -y kubectl
+
+echo "Starting Minikube..."
 minikube start --driver=docker
 
-echo "==== Configuring kubectl alias ===="
+echo "Aliasing kubectl to Minikube's version..."
 alias kubectl="minikube kubectl --"
-echo 'alias kubectl="minikube kubectl --"' >> ~/.bashrc
 
-echo "==== Installing Helm ===="
-curl -O https://get.helm.sh/helm-v3.18.3-linux-amd64.tar.gz
-tar -zxvf helm-v3.18.3-linux-amd64.tar.gz
+echo "Installing Helm..."
+curl -sSL https://get.helm.sh/helm-v3.18.3-linux-amd64.tar.gz -o helm.tar.gz
+tar -zxvf helm.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/helm
-rm -rf helm-v3.18.3-linux-amd64.tar.gz linux-amd64
+rm -rf linux-amd64 helm.tar.gz
 
-echo "==== Adding Helm repo ===="
+echo "Adding Prometheus Helm repo and updating..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
-echo "==== Installing Prometheus Stack ===="
+echo "Installing Prometheus stack..."
 helm install prometheus prometheus-community/kube-prometheus-stack
 
-echo "==== Waiting for Prometheus stack to be ready ===="
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=grafana --timeout=300s || echo "Grafana pod may not be ready yet."
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=prometheus --timeout=300s || echo "Prometheus pod may not be ready yet."
+echo "Waiting for Grafana deployment to be ready..."
+kubectl wait --for=condition=available --timeout=300s deployment/prometheus-grafana
 
-echo "==== Patching Grafana service to NodePort ===="
-kubectl patch svc prometheus-grafana -p '{"spec": {"type": "NodePort"}}'
+echo "Downloading MongoDB manifest and values.yaml..."
+curl -LO https://raw.githubusercontent.com/of1r/k8s-monitoring/main/mongodb.yaml
+curl -LO https://raw.githubusercontent.com/of1r/k8s-monitoring/main/values.yaml
 
-echo "==== Downloading MongoDB deployment YAML ===="
-curl -L -o mongodb.yaml https://raw.githubusercontent.com/of1r/k8s-monitoring/main/mongodb.yaml
-
-echo "==== Deploying MongoDB ===="
+echo "Deploying MongoDB..."
 kubectl apply -f mongodb.yaml
 
-echo "==== Downloading values.yaml for MongoDB Exporter ===="
-curl -L -o values.yaml https://raw.githubusercontent.com/of1r/k8s-monitoring/main/values.yaml
-
-echo "==== Installing MongoDB Exporter ===="
+echo "Installing MongoDB exporter via Helm..."
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
-echo "==== Waiting for MongoDB Exporter pod to be ready ===="
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=prometheus-mongodb-exporter --timeout=180s || echo "MongoDB Exporter pod may not be ready yet."
+echo "Waiting for MongoDB exporter to be ready..."
+kubectl wait --for=condition=available --timeout=300s deployment/mongodb-exporter-prometheus-mongodb-exporter
 
-echo "==== Setup complete! ===="
+echo "Port-forwarding services in the background..."
+nohup kubectl port-forward deployment/prometheus-grafana 3000:3000 >/dev/null 2>&1 &
+nohup kubectl port-forward service/prometheus-kube-prometheus-prometheus 9090:9090 >/dev/null 2>&1 &
+nohup kubectl port-forward service/mongodb-exporter-prometheus-mongodb-exporter 9216:9216 >/dev/null 2>&1 &
+
+IP=$(curl -s ifconfig.me)
+
 echo ""
-echo "➡️  To access services via SSH tunnel, run this from your local machine:"
-echo "ssh -i <your-key>.pem -L 3000:localhost:3000 -L 9090:localhost:9090 -L 9216:localhost:9216 -N ec2-user@<ec2-public-ip>"
+echo "Setup complete. To access the dashboards from your local machine, run this SSH tunnel:"
 echo ""
-echo "📊 Grafana:     http://localhost:3000"
-echo "📈 Prometheus:  http://localhost:9090"
-echo "📦 MongoDB Exp: http://localhost:9216"
+echo "ssh -L 3000:localhost:3000 -L 9090:localhost:9090 -L 9216:localhost:9216 $USER@$IP"
+echo ""
+echo "Then open these URLs in your browser:"
+echo " - Grafana:    http://localhost:3000"
+echo " - Prometheus: http://localhost:9090"
+echo " - MongoDB Exporter: http://localhost:9216"
 
 EONG
