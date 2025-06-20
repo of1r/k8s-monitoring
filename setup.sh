@@ -36,7 +36,7 @@ curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring/main/values.yaml
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
 echo "[10/10] Setting up port forwarding (runs in background)..."
-kubectl port-forward deployment/prometheus-grafana 3000 >/dev/null 2>&1 &
+kubectl port-forward deployment/prometheus-grafana 3000:3000 >/dev/null 2>&1 &
 kubectl port-forward service/prometheus-kube-prometheus-prometheus 9090 >/dev/null 2>&1 &
 kubectl port-forward service/mongodb-exporter-prometheus-mongodb-exporter 9216 >/dev/null 2>&1 &
 
