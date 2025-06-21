@@ -45,7 +45,7 @@ if command -v hyperkit &> /dev/null; then
     minikube start --cpus 4 --memory 8192 --vm-driver hyperkit
 else
     echo "Hyperkit not available, using docker driver with Cloud Shell optimized settings..."
-    minikube start --cpus 2 --memory 4096 --driver=docker --extra-config=kubelet.cadvisor-port=4194 --extra-config=kubelet.enable-cadvisor-metrics=true
+    minikube start --cpus 2 --memory 4096 --driver=docker
 fi
 
 echo "[8/20] Downloading kubectl for Minikube..."
