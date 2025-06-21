@@ -1,41 +1,63 @@
 #!/bin/bash
 set -e
 
-echo "[1/10] Starting Minikube..."
+echo "[1/15] Updating package manager..."
+sudo apt-get update
+
+echo "[2/15] Installing Docker..."
+sudo apt-get install -y docker.io
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+
+echo "[3/15] Installing kubectl..."
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/
+
+echo "[4/15] Installing Minikube..."
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube
+rm minikube-linux-amd64
+
+echo "[5/15] Starting Minikube..."
 minikube start --driver=docker
 
-echo "[2/10] Enabling kubectl..."
+echo "[6/15] Downloading kubectl for Minikube..."
+minikube kubectl -- get po -A
+
+echo "[7/15] Enabling kubectl..."
 alias kubectl="minikube kubectl --"
 echo "alias kubectl='minikube kubectl --'" >> ~/.bashrc
 
-echo "[3/10] Installing Helm..."
+echo "[8/15] Installing Helm..."
 curl -sSL https://get.helm.sh/helm-v3.18.3-linux-amd64.tar.gz -o helm.tar.gz
 tar -zxvf helm.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/helm
 rm -rf helm.tar.gz linux-amd64
 
-echo "[4/10] Adding Prometheus Community repo..."
+echo "[9/15] Adding Prometheus Community repo..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
-echo "[5/10] Installing Prometheus Stack..."
+echo "[10/15] Installing Prometheus Stack..."
 helm install prometheus prometheus-community/kube-prometheus-stack
 
-echo "[6/10] Waiting for Grafana pod to be ready..."
+echo "[11/15] Waiting for Grafana pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
 
-echo "[7/10] Waiting for Prometheus pod to be ready..."
+echo "[12/15] Waiting for Prometheus pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s
 
-echo "[8/10] Deploying MongoDB app..."
+echo "[13/15] Deploying MongoDB app..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/mongodb.yaml
 kubectl apply -f mongodb.yaml
 
-echo "[9/10] Installing MongoDB Exporter..."
+echo "[14/15] Installing MongoDB Exporter..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/values.yaml
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
-echo "[10/10] Setting up port forwarding (runs in background)..."
+echo "[15/15] Setting up port forwarding (runs in background)..."
 
 # Kill any processes using our ports
 echo "Clearing ports..."
