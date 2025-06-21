@@ -1,63 +1,79 @@
 #!/bin/bash
 set -e
 
-echo "[1/15] Updating package manager..."
+echo "[1/15] Suppressing Cloud Shell warnings..."
+mkdir -p ~/.cloudshell
+touch ~/.cloudshell/no-apt-get-warning
+
+echo "[2/15] Updating package manager..."
 sudo apt-get update
 
-echo "[2/15] Installing Docker..."
-sudo apt-get install -y docker.io
-sudo systemctl start docker
-sudo systemctl enable docker
-sudo usermod -aG docker $USER
+echo "[3/15] Installing Docker..."
+if ! command -v docker &> /dev/null; then
+    sudo apt-get install -y docker.io
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    sudo usermod -aG docker $USER
+else
+    echo "Docker is already installed, skipping installation..."
+fi
 
-echo "[3/15] Installing kubectl..."
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-chmod +x kubectl
-sudo mv kubectl /usr/local/bin/
+echo "[4/15] Installing kubectl..."
+if ! command -v kubectl &> /dev/null; then
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    sudo mv kubectl /usr/local/bin/
+else
+    echo "kubectl is already installed, skipping installation..."
+fi
 
-echo "[4/15] Installing Minikube..."
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
-rm minikube-linux-amd64
+echo "[5/15] Installing Minikube..."
+if ! command -v minikube &> /dev/null; then
+    curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+    sudo install minikube-linux-amd64 /usr/local/bin/minikube
+    rm minikube-linux-amd64
+else
+    echo "Minikube is already installed, skipping installation..."
+fi
 
-echo "[5/15] Starting Minikube..."
+echo "[6/15] Starting Minikube..."
 minikube start --driver=docker
 
-echo "[6/15] Downloading kubectl for Minikube..."
+echo "[7/15] Downloading kubectl for Minikube..."
 minikube kubectl -- get po -A
 
-echo "[7/15] Enabling kubectl..."
+echo "[8/15] Enabling kubectl..."
 alias kubectl="minikube kubectl --"
 echo "alias kubectl='minikube kubectl --'" >> ~/.bashrc
 
-echo "[8/15] Installing Helm..."
+echo "[9/15] Installing Helm..."
 curl -sSL https://get.helm.sh/helm-v3.18.3-linux-amd64.tar.gz -o helm.tar.gz
 tar -zxvf helm.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/helm
 rm -rf helm.tar.gz linux-amd64
 
-echo "[9/15] Adding Prometheus Community repo..."
+echo "[10/15] Adding Prometheus Community repo..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
-echo "[10/15] Installing Prometheus Stack..."
+echo "[11/15] Installing Prometheus Stack..."
 helm install prometheus prometheus-community/kube-prometheus-stack
 
-echo "[11/15] Waiting for Grafana pod to be ready..."
+echo "[12/15] Waiting for Grafana pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
 
-echo "[12/15] Waiting for Prometheus pod to be ready..."
+echo "[13/15] Waiting for Prometheus pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s
 
-echo "[13/15] Deploying MongoDB app..."
+echo "[14/15] Deploying MongoDB app..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/mongodb.yaml
 kubectl apply -f mongodb.yaml
 
-echo "[14/15] Installing MongoDB Exporter..."
+echo "[15/15] Installing MongoDB Exporter..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/values.yaml
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
-echo "[15/15] Setting up port forwarding (runs in background)..."
+echo "[16/15] Setting up port forwarding (runs in background)..."
 
 # Kill any processes using our ports
 echo "Clearing ports..."
