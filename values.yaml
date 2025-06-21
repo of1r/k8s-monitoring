@@ -3,5 +3,8 @@ mongodb:
 
 serviceMonitor:
   enabled: true
-  additionalLabels:
+  labels:
     release: prometheus
+  interval: 30s
+  scrapeTimeout: 10s
+    

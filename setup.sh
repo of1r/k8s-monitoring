@@ -1,14 +1,17 @@
 #!/bin/bash
 set -e
 
-echo "[1/16] Suppressing Cloud Shell warnings..."
+echo "[1/18] Suppressing Cloud Shell warnings..."
 mkdir -p ~/.cloudshell
 touch ~/.cloudshell/no-apt-get-warning
 
-echo "[2/16] Updating package manager..."
+echo "[2/18] Updating package manager..."
 sudo apt-get update
 
-echo "[3/16] Installing Docker..."
+echo "[3/18] Installing required tools..."
+sudo apt-get install -y lsof
+
+echo "[4/18] Installing Docker..."
 if ! command -v docker &> /dev/null; then
     sudo apt-get install -y docker.io
     sudo systemctl start docker
@@ -18,7 +21,7 @@ else
     echo "Docker is already installed, skipping installation..."
 fi
 
-echo "[4/16] Installing kubectl..."
+echo "[5/18] Installing kubectl..."
 if ! command -v kubectl &> /dev/null; then
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
     chmod +x kubectl
@@ -27,7 +30,7 @@ else
     echo "kubectl is already installed, skipping installation..."
 fi
 
-echo "[5/16] Installing Minikube..."
+echo "[6/18] Installing Minikube..."
 if ! command -v minikube &> /dev/null; then
     curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
     sudo install minikube-linux-amd64 /usr/local/bin/minikube
@@ -36,44 +39,47 @@ else
     echo "Minikube is already installed, skipping installation..."
 fi
 
-echo "[6/16] Starting Minikube..."
+echo "[7/18] Starting Minikube..."
 minikube start --driver=docker
 
-echo "[7/16] Downloading kubectl for Minikube..."
+echo "[8/18] Downloading kubectl for Minikube..."
 minikube kubectl -- get po -A
 
-echo "[8/16] Enabling kubectl..."
+echo "[9/18] Enabling kubectl..."
 alias kubectl="minikube kubectl --"
 echo "alias kubectl='minikube kubectl --'" >> ~/.bashrc
 
-echo "[9/16] Installing Helm..."
+echo "[10/18] Installing Helm..."
 curl -sSL https://get.helm.sh/helm-v3.18.3-linux-amd64.tar.gz -o helm.tar.gz
 tar -zxvf helm.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/helm
 rm -rf helm.tar.gz linux-amd64
 
-echo "[10/16] Adding Prometheus Community repo..."
+echo "[11/18] Adding Prometheus Community repo..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
-echo "[11/16] Installing Prometheus Stack..."
+echo "[12/18] Installing Prometheus Stack..."
 helm install prometheus prometheus-community/kube-prometheus-stack
 
-echo "[12/16] Waiting for Grafana pod to be ready..."
+echo "[13/18] Waiting for Grafana pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
 
-echo "[13/16] Waiting for Prometheus pod to be ready..."
+echo "[14/18] Waiting for Prometheus pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s
 
-echo "[14/16] Deploying MongoDB app..."
+echo "[15/18] Deploying MongoDB app..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/mongodb.yaml
 kubectl apply -f mongodb.yaml
 
-echo "[15/16] Installing MongoDB Exporter..."
+echo "[16/18] Installing MongoDB Exporter..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/values.yaml
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
-echo "[16/16] Setting up port forwarding (runs in background)..."
+echo "[17/18] Waiting for MongoDB exporter to be ready..."
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-mongodb-exporter --timeout=120s
+
+echo "[18/18] Setting up port forwarding (runs in background)..."
 
 # Kill any processes using our ports
 echo "Clearing ports..."
@@ -98,6 +104,12 @@ echo ""
 echo "Default Grafana credentials:"
 echo "Username: admin"
 echo "Password: prom-operator"
+echo ""
+echo "To verify MongoDB metrics are being scraped:"
+echo "1. Go to Prometheus (port 9090)"
+echo "2. Check 'Status' → 'Targets' to see mongodb-exporter"
+echo "3. Query 'mongodb_up' to verify connection"
+echo "4. Wait 1-2 minutes for first scrape"
 echo ""
 echo "If you encounter issues, check the logs:"
 echo "cat /tmp/grafana.log"
