@@ -66,12 +66,15 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update
 
 echo "[12/20] Installing Prometheus Stack..."
-helm install prometheus prometheus-community/kube-prometheus-stack --set grafana.config.security.allow_embedding=true --set grafana.config.security.allow_embedding_from_domain="*"
+helm install prometheus prometheus-community/kube-prometheus-stack --set grafana.config.security.allow_embedding=true --set grafana.config.security.allow_embedding_from_domain="*" --set grafana.config.security.cookie_samesite=none --set grafana.config.security.cookie_secure=false
 
 echo "[13/20] Waiting for Grafana pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
 
 echo "[14/20] Configuring Grafana CORS settings..."
+# Apply additional CORS configuration
+kubectl patch configmap prometheus-grafana --type='merge' -p='{"data":{"grafana.ini":"[security]\nallow_embedding = true\nallow_embedding_from_domain = *\ncookie_samesite = none\ncookie_secure = false\n\n[server]\nallow_embedding = true\n"}}' 2>/dev/null || true
+
 # Restart Grafana to apply CORS settings
 kubectl rollout restart deployment/prometheus-grafana
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
@@ -98,12 +101,16 @@ echo "[20/20] Setting up port forwarding (runs in background)..."
 
 # Kill any processes using our ports
 echo "Clearing ports..."
-sudo kill -9 $(lsof -t -i:3000) 2>/dev/null || true
+sudo kill -9 $(lsof -t -i:8080) 2>/dev/null || true
 sudo kill -9 $(lsof -t -i:9090) 2>/dev/null || true
 sudo kill -9 $(lsof -t -i:9216) 2>/dev/null || true
 sleep 2
 
-kubectl port-forward --address 0.0.0.0 deployment/prometheus-grafana 3000:3000 >/tmp/grafana.log 2>&1 &
+# Kill current forwarding
+pkill -f kubectl
+
+# Try service on port 8080
+kubectl port-forward --address 0.0.0.0 service/prometheus-grafana 8080:80 >/tmp/grafana.log 2>&1 &
 kubectl port-forward --address 0.0.0.0 service/prometheus-kube-prometheus-prometheus 9090:9090 >/tmp/prometheus.log 2>&1 &
 kubectl port-forward --address 0.0.0.0 service/mongodb-exporter-prometheus-mongodb-exporter 9216:9216 >/tmp/mongodb_exporter.log 2>&1 &
 
@@ -112,7 +119,7 @@ echo ""
 echo "🎉 Setup complete!"
 echo ""
 echo "Access dashboards using Cloud Shell Web Preview:"
-echo "👉 Grafana port: 3000"
+echo "👉 Grafana port: 8080"
 echo "👉 Prometheus port: 9090"
 echo "👉 MongoDB Exporter port: 9216"
 echo ""
