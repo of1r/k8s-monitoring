@@ -107,16 +107,19 @@ sudo kill -9 $(lsof -t -i:9093) 2>/dev/null || true
 sudo kill -9 $(lsof -t -i:9216) 2>/dev/null || true
 sleep 2
 
-# Kill current forwarding
-pkill -f kubectl
+# Kill only kubectl port-forward processes (not the script)
+pkill -f "kubectl port-forward" 2>/dev/null || true
+sleep 2
 
-# Try service on port 8080
 kubectl port-forward --address 0.0.0.0 service/prometheus-grafana 8080:80 >/tmp/grafana.log 2>&1 &
 kubectl port-forward --address 0.0.0.0 service/prometheus-kube-prometheus-prometheus 9090:9090 >/tmp/prometheus.log 2>&1 &
 kubectl port-forward --address 0.0.0.0 service/prometheus-kube-prometheus-alertmanager 9093:9093 >/tmp/alertmanager.log 2>&1 &
 kubectl port-forward --address 0.0.0.0 service/mongodb-exporter-prometheus-mongodb-exporter 9216:9216 >/tmp/mongodb_exporter.log 2>&1 &
 
+# Wait for port forwarding to start
 sleep 5
+
+# Display final output
 echo ""
 echo "🎉 Setup complete!"
 echo ""
