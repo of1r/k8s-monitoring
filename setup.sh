@@ -84,7 +84,7 @@ kubectl patch deployment prometheus-grafana --type='json' -p='[{"op": "add", "pa
 
 # Restart Grafana to apply settings
 kubectl rollout restart deployment/prometheus-grafana
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
+kubectl rollout status deployment/prometheus-grafana --timeout=180s
 
 echo "[15/20] Waiting for Prometheus pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s
