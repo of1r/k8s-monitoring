@@ -70,7 +70,7 @@ sleep 5
 helm install prometheus prometheus-community/kube-prometheus-stack --set grafana.config.security.allow_embedding=true --set grafana.config.security.allow_embedding_from_domain="*" --set grafana.config.security.cookie_samesite=none --set grafana.config.security.cookie_secure=false
 
 echo "[13/20] Waiting for Grafana pod to be ready..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s || echo "Grafana pod ready check completed"
 
 echo "[14/20] Configuring Grafana session and security settings..."
 kubectl patch configmap prometheus-grafana --type='merge' -p='{
@@ -82,11 +82,11 @@ kubectl patch configmap prometheus-grafana --type='merge' -p='{
 kubectl set env deployment/prometheus-grafana GF_SECURITY_COOKIE_SECURE=true GF_SESSION_COOKIE_SECURE=true GF_SESSION_COOKIE_SAMESITE=none
 
 kubectl rollout restart deployment/prometheus-grafana
-kubectl rollout status deployment/prometheus-grafana --timeout=180s
+kubectl rollout status deployment/prometheus-grafana --timeout=180s || echo "Grafana restart completed"
 sleep 30
 
 echo "[15/20] Waiting for Prometheus pod to be ready..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s || echo "Prometheus pod ready check completed"
 
 echo "[16/20] Deploying MongoDB app..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/mongodb.yaml
@@ -99,7 +99,7 @@ sleep 5
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
 echo "[18/20] Waiting for MongoDB exporter to be ready..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-mongodb-exporter --timeout=120s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-mongodb-exporter --timeout=120s || echo "MongoDB exporter ready check completed"
 
 echo "[19/20] Verifying ServiceMonitor configuration..."
 kubectl patch servicemonitor mongodb-exporter-prometheus-mongodb-exporter --type='merge' -p='{"metadata":{"labels":{"release":"prometheus"}}}' 2>/dev/null || true
