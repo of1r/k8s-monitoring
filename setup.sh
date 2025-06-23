@@ -75,11 +75,11 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n defa
 echo "[14/20] Configuring Grafana session and security settings..."
 kubectl patch configmap prometheus-grafana --type='merge' -p='{
   "data": {
-    "grafana.ini": "[security]\nallow_embedding = true\nallow_embedding_from_domain = *\ncookie_samesite = none\ncookie_secure = false\n\n[session]\ncookie_secure = false\ncookie_samesite = none\nprovider = memory\ncookie_name = grafana_sess\nsession_life_time = 86400"
+    "grafana.ini": "[security]\nallow_embedding = true\nallow_embedding_from_domain = *\ncookie_samesite = none\ncookie_secure = true\n\n[session]\ncookie_secure = true\ncookie_samesite = none\nprovider = memory\ncookie_name = grafana_sess\nsession_life_time = 86400"
   }
 }' 2>/dev/null || true
 
-kubectl set env deployment/prometheus-grafana GF_SECURITY_COOKIE_SECURE=false GF_SESSION_COOKIE_SECURE=false GF_SESSION_COOKIE_SAMESITE=none
+kubectl set env deployment/prometheus-grafana GF_SECURITY_COOKIE_SECURE=true GF_SESSION_COOKIE_SECURE=true GF_SESSION_COOKIE_SAMESITE=none
 
 kubectl rollout restart deployment/prometheus-grafana
 kubectl rollout status deployment/prometheus-grafana --timeout=180s
