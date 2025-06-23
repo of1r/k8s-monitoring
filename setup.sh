@@ -72,28 +72,15 @@ echo "[13/20] Waiting for Grafana pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
 
 echo "[14/20] Configuring Grafana CORS settings..."
-# Apply comprehensive CORS configuration for Cloud Shell
-kubectl patch configmap prometheus-grafana --type='merge' -p='{"data":{"grafana.ini":"[security]\nallow_embedding = true\nallow_embedding_from_domain = *\ncookie_samesite = none\ncookie_secure = false\n\n[server]\nallow_embedding = true\nroot_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/\nserve_from_sub_path = true\n\n[auth.anonymous]\nenabled = false\n\n[auth.basic]\nenabled = true\n\n[users]\nallow_sign_up = false\nallow_org_create = false\n\n[log]\nmode = console\nlevel = info\n"}}' 2>/dev/null || true
+# Simple CORS configuration for Cloud Shell
+kubectl patch configmap prometheus-grafana --type='merge' -p='{"data":{"grafana.ini":"[security]\nallow_embedding = true\nallow_embedding_from_domain = *\ncookie_samesite = none\ncookie_secure = false\n"}}' 2>/dev/null || true
 
-# Also patch the deployment to ensure CORS headers are set
-kubectl patch deployment prometheus-grafana --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_ALLOW_EMBEDDING", "value": "true"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_ALLOW_EMBEDDING_FROM_DOMAIN", "value": "*"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_COOKIE_SAMESITE", "value": "none"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_COOKIE_SECURE", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_ALLOW_EMBEDDING", "value": "true"}}]' 2>/dev/null || true
+# Add environment variables as backup
+kubectl patch deployment prometheus-grafana --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_ALLOW_EMBEDDING", "value": "true"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_ALLOW_EMBEDDING_FROM_DOMAIN", "value": "*"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_COOKIE_SAMESITE", "value": "none"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_COOKIE_SECURE", "value": "false"}}]' 2>/dev/null || true
 
-# Add additional environment variables for Cloud Shell compatibility
-kubectl patch deployment prometheus-grafana --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_ROOT_URL", "value": "%(protocol)s://%(domain)s:%(http_port)s/grafana/"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_SERVE_FROM_SUB_PATH", "value": "true"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_AUTH_ANONYMOUS_ENABLED", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_AUTH_BASIC_ENABLED", "value": "true"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_USERS_ALLOW_SIGN_UP", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_USERS_ALLOW_ORG_CREATE", "value": "false"}}]' 2>/dev/null || true
-
-# Restart Grafana to apply CORS settings
+# Restart Grafana to apply settings
 kubectl rollout restart deployment/prometheus-grafana
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
-
-# Additional verification and retry mechanism
-echo "Verifying CORS configuration..."
-sleep 10
-if ! kubectl get pods -l app.kubernetes.io/name=grafana | grep -q "Running"; then
-    echo "Grafana pod not ready, applying CORS fix again..."
-    kubectl patch deployment prometheus-grafana --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_ALLOW_EMBEDDING", "value": "true"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_ALLOW_EMBEDDING_FROM_DOMAIN", "value": "*"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_COOKIE_SAMESITE", "value": "none"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_COOKIE_SECURE", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_ALLOW_EMBEDDING", "value": "true"}}]' 2>/dev/null || true
-    kubectl rollout restart deployment/prometheus-grafana
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
-fi
 
 echo "[15/20] Waiting for Prometheus pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s
@@ -154,22 +141,10 @@ echo "1. Check Prometheus targets: Go to Prometheus (port 9090) → Status → T
 echo "2. Look for mongodb-exporter target (should be UP)"
 echo "3. In Prometheus, query: mongodb_up (should return 1)"
 echo "4. In Grafana, create a new dashboard and query: mongodb_up"
-echo "5. Check Alertmanager: Go to Alertmanager (port 9093) to see alerts"
 echo ""
-echo "If you see 'No data' in Grafana:"
-echo "- Wait 2-3 minutes for first scrape"
-echo "- Check time range (set to 'Last 15 minutes')"
-echo "- Verify data source is set to 'Prometheus'"
-echo ""
-echo "If you encounter CORS 'origin not allowed' errors in Grafana:"
+echo "If you encounter CORS issues in Grafana:"
 echo "- Wait 30 seconds for Grafana to fully restart"
-echo "- Clear your browser cache or use incognito mode"
-echo "- Try refreshing the page"
-echo "- The setup includes comprehensive CORS fixes for Cloud Shell"
-echo ""
-echo "If you encounter issues, check the logs:"
-echo "cat /tmp/grafana.log"
-echo "cat /tmp/mongodb_exporter.log"
+echo "- Clear browser cache or use incognito mode"
 echo ""
 echo "To restart port forwarding if it stops:"
 echo "pkill -f 'kubectl port-forward' && sleep 2"
