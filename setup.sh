@@ -67,20 +67,26 @@ helm repo update
 echo "[12/20] Installing Prometheus Stack..."
 helm uninstall prometheus 2>/dev/null || true
 sleep 5
-helm install prometheus prometheus-community/kube-prometheus-stack --set grafana.config.security.allow_embedding=true --set grafana.config.security.allow_embedding_from_domain="*" --set grafana.config.security.cookie_samesite=none --set grafana.config.security.cookie_secure=false
+# Set Grafana config values for Cloud Shell compatibility directly during installation.
+# This ensures secure cookies are enabled for HTTPS, and embedding is allowed.
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --set grafana.config.security.allow_embedding=true \
+  --set grafana.config.security.cookie_samesite=none \
+  --set grafana.config.security.cookie_secure=true \
+  --set grafana.config.session.cookie_secure=true
 
 echo "[13/20] Waiting for Grafana pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s || echo "Grafana pod ready check completed"
 
-echo "[14/20] Configuring Grafana session and security settings..."
-kubectl patch configmap prometheus-grafana --type='merge' -p='{
-  "data": {
-    "grafana.ini": "[security]\nallow_embedding = true\nallow_embedding_from_domain = *\ncookie_samesite = none\ncookie_secure = true\n\n[session]\ncookie_secure = true\ncookie_samesite = none\nprovider = memory\ncookie_name = grafana_sess\nsession_life_time = 86400"
-  }
-}' 2>/dev/null || true
+echo "[14/20] Setting Grafana Environment Variables for Cloud Shell..."
+# These environment variables provide a strong override to ensure compatibility.
+# Importantly, we DO NOT set GF_SERVER_ROOT_URL or similar, which caused the bad redirects.
+kubectl set env deployment/prometheus-grafana \
+  GF_SECURITY_COOKIE_SECURE=true \
+  GF_SESSION_COOKIE_SECURE=true \
+  GF_SESSION_COOKIE_SAMESITE=none
 
-kubectl set env deployment/prometheus-grafana GF_SECURITY_COOKIE_SECURE=true GF_SESSION_COOKIE_SECURE=true GF_SESSION_COOKIE_SAMESITE=none
-
+# Restart Grafana to apply all settings.
 kubectl rollout restart deployment/prometheus-grafana
 kubectl rollout status deployment/prometheus-grafana --timeout=180s || echo "Grafana restart completed"
 sleep 30
