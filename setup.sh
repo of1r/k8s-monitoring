@@ -1,6 +1,20 @@
 #!/bin/bash
 set -e
 
+# === NEW: Argument check for Grafana URL ===
+if [ -z "$1" ]; then
+  echo "ERROR: Please provide the Grafana public URL as the first argument."
+  echo "How to get the URL:"
+  echo "1. In the Cloud Shell toolbar, click the 'Web Preview' button."
+  echo "2. Select 'Preview on port 8080'."
+  echo "3. Copy the full URL from the new browser tab that opens."
+  echo "4. Run this script again with the copied URL:"
+  echo "   ./setup.sh <your_grafana_url>"
+  exit 1
+fi
+GRAFANA_URL=$1
+echo "Using Grafana URL: ${GRAFANA_URL}"
+
 echo "[1/20] Suppressing Cloud Shell warnings..."
 mkdir -p ~/.cloudshell
 touch ~/.cloudshell/no-apt-get-warning
@@ -67,29 +81,18 @@ helm repo update
 echo "[12/20] Installing Prometheus Stack..."
 helm uninstall prometheus 2>/dev/null || true
 sleep 5
-# Set Grafana config values for Cloud Shell compatibility directly during installation.
-# This ensures secure cookies are enabled for HTTPS, and embedding is allowed.
+# Install Grafana with all necessary configurations for Cloud Shell proxy compatibility.
+# This prevents all "origin not allowed" and login loop issues.
 helm install prometheus prometheus-community/kube-prometheus-stack \
-  --set grafana.config.security.allow_embedding=true \
-  --set grafana.config.security.cookie_samesite=none \
-  --set grafana.config.security.cookie_secure=true \
-  --set grafana.config.session.cookie_secure=true
+  --set grafana.grafana\\.ini.server.protocol=https \
+  --set grafana.grafana\\.ini.server.root_url="${GRAFANA_URL}" \
+  --set grafana.grafana\\.ini.security.cookie_secure=true \
+  --set grafana.grafana\\.ini.security.cookie_samesite=none \
+  --set grafana.grafana\\.ini.security.allow_embedding=true
 
 echo "[13/20] Waiting for Grafana pod to be ready..."
+# This step is now sufficient, no further patching is needed.
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s || echo "Grafana pod ready check completed"
-
-echo "[14/20] Setting Grafana Environment Variables for Cloud Shell..."
-# These environment variables provide a strong override to ensure compatibility.
-# Importantly, we DO NOT set GF_SERVER_ROOT_URL or similar, which caused the bad redirects.
-kubectl set env deployment/prometheus-grafana \
-  GF_SECURITY_COOKIE_SECURE=true \
-  GF_SESSION_COOKIE_SECURE=true \
-  GF_SESSION_COOKIE_SAMESITE=none
-
-# Restart Grafana to apply all settings.
-kubectl rollout restart deployment/prometheus-grafana
-kubectl rollout status deployment/prometheus-grafana --timeout=180s || echo "Grafana restart completed"
-sleep 30
 
 echo "[15/20] Waiting for Prometheus pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s || echo "Prometheus pod ready check completed"
