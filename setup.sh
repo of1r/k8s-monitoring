@@ -66,6 +66,10 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update
 
 echo "[12/20] Installing Prometheus Stack..."
+# Clean up existing installation if it exists
+helm uninstall prometheus 2>/dev/null || true
+sleep 5
+
 helm install prometheus prometheus-community/kube-prometheus-stack --set grafana.config.security.allow_embedding=true --set grafana.config.security.allow_embedding_from_domain="*" --set grafana.config.security.cookie_samesite=none --set grafana.config.security.cookie_secure=false
 
 echo "[13/20] Waiting for Grafana pod to be ready..."
