@@ -97,6 +97,8 @@ kubectl apply -f mongodb.yaml
 
 echo "[17/20] Installing MongoDB Exporter..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/values.yaml
+helm uninstall mongodb-exporter 2>/dev/null || true
+sleep 5
 helm install mongodb-exporter prometheus-community/prometheus-mongodb-exporter -f values.yaml
 
 echo "[18/20] Waiting for MongoDB exporter to be ready..."
