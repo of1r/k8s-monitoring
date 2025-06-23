@@ -40,7 +40,6 @@ else
 fi
 
 echo "[7/20] Starting Minikube..."
-# Try hyperkit first (original), fall back to docker if not available
 if command -v hyperkit &> /dev/null; then
     minikube start --cpus 4 --memory 8192 --vm-driver hyperkit
 else
@@ -66,53 +65,27 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update
 
 echo "[12/20] Installing Prometheus Stack..."
-# Clean up existing installation if it exists
 helm uninstall prometheus 2>/dev/null || true
 sleep 5
-
-helm install prometheus prometheus-community/kube-prometheus-stack \
-  --set grafana.config.security.allow_embedding=true \
-  --set grafana.config.security.allow_embedding_from_domain="*" \
-  --set grafana.config.security.cookie_samesite=none \
-  --set grafana.config.security.cookie_secure=false \
-  --set grafana.config.security.disable_initial_admin_creation=false \
-  --set grafana.config.security.disable_gravatar=false \
-  --set grafana.config.security.login_remember_days=7 \
-  --set grafana.config.security.login_maximum_inactive_lifetime_days=7 \
-  --set grafana.config.security.login_maximum_lifetime_days=30 \
-  --set grafana.config.security.login_maximum_remember_lifetime_days=7 \
-  --set grafana.config.security.allow_embedding_from_domain="*" \
-  --set grafana.config.security.cookie_samesite=none \
-  --set grafana.config.security.cookie_secure=false \
-  --set grafana.config.security.disable_initial_admin_creation=false \
-  --set grafana.config.security.disable_gravatar=false \
-  --set grafana.config.security.login_remember_days=7 \
-  --set grafana.config.security.login_maximum_inactive_lifetime_days=7 \
-  --set grafana.config.security.login_maximum_lifetime_days=30 \
-  --set grafana.config.security.login_maximum_remember_lifetime_days=7 \
-  --set grafana.config.server.domain="localhost" \
-  --set grafana.config.server.root_url="http://localhost:8080/" \
-  --set grafana.config.server.serve_from_sub_path=false \
-  --set grafana.config.server.enforce_domain=false \
-  --set grafana.config.server.cookie_samesite=none \
-  --set grafana.config.server.cookie_secure=false
+helm install prometheus prometheus-community/kube-prometheus-stack --set grafana.config.security.allow_embedding=true --set grafana.config.security.allow_embedding_from_domain="*" --set grafana.config.security.cookie_samesite=none --set grafana.config.security.cookie_secure=false
 
 echo "[13/20] Waiting for Grafana pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s
 
-echo "[14/20] Configuring Grafana CORS and session settings..."
-# Enhanced CORS and session configuration for Cloud Shell
-kubectl patch configmap prometheus-grafana --type='merge' -p='{"data":{"grafana.ini":"[security]\nallow_embedding = true\nallow_embedding_from_domain = *\ncookie_samesite = none\ncookie_secure = false\ndisable_initial_admin_creation = false\ndisable_gravatar = false\nlogin_remember_days = 7\nlogin_maximum_inactive_lifetime_days = 7\nlogin_maximum_lifetime_days = 30\nlogin_maximum_remember_lifetime_days = 7\n\n[server]\ndomain = localhost\nroot_url = http://localhost:8080/\nserve_from_sub_path = false\nenforce_domain = false\ncookie_samesite = none\ncookie_secure = false\n\n[auth.anonymous]\nenabled = false\n\n[auth.basic]\nenabled = true\n\n[session]\nprovider = memory\nprovider_config = \ncookie_name = grafana_sess\ncookie_secure = false\ncookie_samesite = none\nsession_life_time = 86400\n"}}' 2>/dev/null || true
+echo "[14/20] Configuring Grafana session and security settings..."
+kubectl patch configmap prometheus-grafana --type='merge' -p='{
+  "data": {
+    "grafana.ini": "[security]\nallow_embedding = true\nallow_embedding_from_domain = *\ncookie_samesite = none\ncookie_secure = true\n\n[session]\ncookie_secure = true\ncookie_samesite = none\nprovider = memory\ncookie_name = grafana_sess\nsession_life_time = 86400"
+  }
+}' 2>/dev/null || true
 
-# Add comprehensive environment variables as backup
-kubectl patch deployment prometheus-grafana --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_ALLOW_EMBEDDING", "value": "true"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_ALLOW_EMBEDDING_FROM_DOMAIN", "value": "*"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_COOKIE_SAMESITE", "value": "none"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SECURITY_COOKIE_SECURE", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_DOMAIN", "value": "localhost"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_ROOT_URL", "value": "http://localhost:8080/"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_SERVE_FROM_SUB_PATH", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_ENFORCE_DOMAIN", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_COOKIE_SAMESITE", "value": "none"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SERVER_COOKIE_SECURE", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SESSION_PROVIDER", "value": "memory"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SESSION_COOKIE_NAME", "value": "grafana_sess"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SESSION_COOKIE_SECURE", "value": "false"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SESSION_COOKIE_SAMESITE", "value": "none"}}, {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SESSION_LIFE_TIME", "value": "86400"}}]' 2>/dev/null || true
+kubectl patch deployment prometheus-grafana --type='json' -p='[
+  {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SESSION_COOKIE_SECURE", "value": "true"}},
+  {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "GF_SESSION_COOKIE_SAMESITE", "value": "none"}}
+]' 2>/dev/null || true
 
-# Restart Grafana to apply settings
 kubectl rollout restart deployment/prometheus-grafana
 kubectl rollout status deployment/prometheus-grafana --timeout=180s
-
-# Wait additional time for Grafana to fully initialize
-echo "Waiting for Grafana to fully initialize..."
 sleep 30
 
 echo "[15/20] Waiting for Prometheus pod to be ready..."
@@ -130,20 +103,15 @@ echo "[18/20] Waiting for MongoDB exporter to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-mongodb-exporter --timeout=120s
 
 echo "[19/20] Verifying ServiceMonitor configuration..."
-# Ensure the ServiceMonitor has the correct labels
 kubectl patch servicemonitor mongodb-exporter-prometheus-mongodb-exporter --type='merge' -p='{"metadata":{"labels":{"release":"prometheus"}}}' 2>/dev/null || true
 
 echo "[20/20] Setting up port forwarding (runs in background)..."
-
-# Kill any processes using our ports
 echo "Clearing ports..."
 sudo kill -9 $(lsof -t -i:8080) 2>/dev/null || true
 sudo kill -9 $(lsof -t -i:9090) 2>/dev/null || true
 sudo kill -9 $(lsof -t -i:9093) 2>/dev/null || true
 sudo kill -9 $(lsof -t -i:9216) 2>/dev/null || true
 sleep 2
-
-# Kill only kubectl port-forward processes (not the script)
 pkill -f "kubectl port-forward" 2>/dev/null || true
 sleep 2
 
@@ -152,10 +120,8 @@ kubectl port-forward --address 0.0.0.0 service/prometheus-kube-prometheus-promet
 kubectl port-forward --address 0.0.0.0 service/prometheus-kube-prometheus-alertmanager 9093:9093 >/tmp/alertmanager.log 2>&1 &
 kubectl port-forward --address 0.0.0.0 service/mongodb-exporter-prometheus-mongodb-exporter 9216:9216 >/tmp/mongodb_exporter.log 2>&1 &
 
-# Wait for port forwarding to start
 sleep 5
 
-# Display final output
 echo ""
 echo "🎉 Setup complete!"
 echo ""
