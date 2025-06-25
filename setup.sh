@@ -106,8 +106,9 @@ helm repo update
 echo "[12/20] Installing Prometheus Stack..."
 helm uninstall prometheus 2>/dev/null || true
 sleep 5
-# Perform a minimal installation. All Cloud Shell specific config will be done after.
-helm install prometheus prometheus-community/kube-prometheus-stack
+# Install Prometheus with the required 'cluster' label for Grafana dashboards.
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --set prometheus.prometheusSpec.externalLabels.cluster=minikube
 
 echo "[13/20] Waiting for Grafana pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s || echo "Grafana pod ready check completed"
