@@ -1,19 +1,29 @@
 #!/bin/bash
 set -e
 
-# === NEW: Argument check for Grafana URL ===
+# === Grafana URL configuration ===
+# For Google Cloud Shell: Provide the Grafana public URL as argument
+# For local development: Use default localhost URL
 if [ -z "$1" ]; then
-  echo "ERROR: Please provide the Grafana public URL as the first argument."
-  echo "How to get the URL:"
+  echo "No Grafana URL provided, using default localhost configuration..."
+  echo "For Google Cloud Shell, provide the Grafana public URL:"
   echo "1. In the Cloud Shell toolbar, click the 'Web Preview' button."
   echo "2. Select 'Preview on port 8080'."
   echo "3. Copy the full URL from the new browser tab that opens."
   echo "4. Run this script again with the copied URL:"
   echo "   ./setup.sh <your_grafana_url>"
-  exit 1
+  echo ""
+  echo "Using default: http://localhost:8080"
+  GRAFANA_URL="http://localhost:8080"
+  GRAFANA_DOMAIN="localhost"
+else
+  GRAFANA_URL=$1
+  # Extract the hostname from the full URL
+  GRAFANA_DOMAIN=$(echo $GRAFANA_URL | sed 's|https://||' | sed 's|http://||' | sed 's|/.*||')
 fi
-GRAFANA_URL=$1
+
 echo "Using Grafana URL: ${GRAFANA_URL}"
+echo "Using Grafana Domain: ${GRAFANA_DOMAIN}"
 
 echo "[1/20] Suppressing Cloud Shell warnings..."
 mkdir -p ~/.cloudshell
@@ -23,6 +33,21 @@ echo "[2/20] Updating package manager..."
 sudo apt-get update
 
 echo "[3/20] Installing required tools..."
+# Check for and kill any process holding one of the three apt lock files.
+if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+   sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+   sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+  echo "Existing apt process found. Killing it to proceed..."
+  # Find and kill the process holding the lock on any of the files
+  sudo lsof -t /var/lib/dpkg/lock-frontend | xargs --no-run-if-empty sudo kill -9
+  sudo lsof -t /var/lib/dpkg/lock | xargs --no-run-if-empty sudo kill -9
+  sudo lsof -t /var/cache/apt/archives/lock | xargs --no-run-if-empty sudo kill -9
+  # Remove all possible lock files
+  sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock
+  # Reconfigure dpkg to be safe
+  sudo dpkg --configure -a
+  echo "Stuck process cleared."
+fi
 sudo apt-get install -y lsof
 
 echo "[4/20] Installing Docker..."
@@ -81,18 +106,27 @@ helm repo update
 echo "[12/20] Installing Prometheus Stack..."
 helm uninstall prometheus 2>/dev/null || true
 sleep 5
-# Install Grafana with all necessary configurations for Cloud Shell proxy compatibility.
-# This prevents all "origin not allowed" and login loop issues.
-helm install prometheus prometheus-community/kube-prometheus-stack \
-  --set grafana.grafana\\.ini.server.protocol=https \
-  --set grafana.grafana\\.ini.server.root_url="${GRAFANA_URL}" \
-  --set grafana.grafana\\.ini.security.cookie_secure=true \
-  --set grafana.grafana\\.ini.security.cookie_samesite=none \
-  --set grafana.grafana\\.ini.security.allow_embedding=true
+# Perform a minimal installation. All Cloud Shell specific config will be done after.
+helm install prometheus prometheus-community/kube-prometheus-stack
 
 echo "[13/20] Waiting for Grafana pod to be ready..."
-# This step is now sufficient, no further patching is needed.
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n default --timeout=180s || echo "Grafana pod ready check completed"
+
+echo "[14/20] Applying Grafana configuration for Cloud Shell..."
+# This is the definitive fix, setting BOTH the root_url for links and the
+# domain for security.
+kubectl set env deployment/prometheus-grafana \
+  "GF_SERVER_ROOT_URL=${GRAFANA_URL}" \
+  "GF_SERVER_DOMAIN=${GRAFANA_DOMAIN}" \
+  "GF_SECURITY_COOKIE_SECURE=true" \
+  "GF_SECURITY_COOKIE_SAMESITE=none" \
+  "GF_SECURITY_ALLOW_EMBEDDING=true"
+
+# Restart Grafana to apply the new environment variables.
+echo "Restarting Grafana to apply new configuration..."
+kubectl rollout restart deployment/prometheus-grafana
+kubectl rollout status deployment/prometheus-grafana --timeout=180s || echo "Grafana restart completed"
+sleep 30
 
 echo "[15/20] Waiting for Prometheus pod to be ready..."
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s || echo "Prometheus pod ready check completed"
