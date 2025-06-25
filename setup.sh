@@ -18,8 +18,10 @@ if [ -z "$1" ]; then
   GRAFANA_DOMAIN="localhost"
 else
   GRAFANA_URL=$1
-  # Extract the hostname from the full URL
-  GRAFANA_DOMAIN=$(echo $GRAFANA_URL | sed 's|https://||' | sed 's|http://||' | sed 's|/.*||')
+  # Extract the hostname and domain from the full URL.
+  # The domain must not include the port prefix (e.g., '8080-') for cookies to work correctly.
+  GRAFANA_HOSTNAME=$(echo $GRAFANA_URL | sed -e 's|https?://||' -e 's|/.*$||')
+  GRAFANA_DOMAIN=$(echo $GRAFANA_HOSTNAME | sed -e 's/^[0-9]*-//')
 fi
 
 echo "Using Grafana URL: ${GRAFANA_URL}"
