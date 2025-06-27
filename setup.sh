@@ -3,8 +3,8 @@ set -e
 
 echo ""
 echo "+==============================================================+"
-echo "|                    K8s Monitoring Lab Setup                   |"
-echo "|              Prometheus + Grafana + MongoDB Exporter          |"
+echo "|                    K8s Monitoring Lab Setup                  |"
+echo "|              Prometheus + Grafana + MongoDB Exporter         |"
 echo "+==============================================================+"
 echo ""
 
@@ -46,7 +46,16 @@ else
 fi
 
 echo "[6/12] Starting Minikube..."
-minikube start --cpus 4 --memory 8192 --driver=docker
+# Calculate available memory (use 75% of available RAM, minimum 2GB, maximum 8GB)
+TOTAL_MEM=$(free -m | awk 'NR==2{printf "%.0f", $2}')
+MINIKUBE_MEM=$((TOTAL_MEM * 75 / 100))
+if [ $MINIKUBE_MEM -lt 2048 ]; then
+    MINIKUBE_MEM=2048
+elif [ $MINIKUBE_MEM -gt 8192 ]; then
+    MINIKUBE_MEM=8192
+fi
+echo "System has ${TOTAL_MEM}MB RAM, allocating ${MINIKUBE_MEM}MB to Minikube"
+minikube start --cpus 4 --memory ${MINIKUBE_MEM} --driver=docker
 
 echo "[7/12] Setting up kubectl..."
 alias kubectl="minikube kubectl --"
