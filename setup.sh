@@ -12,7 +12,7 @@ echo "[1/12] Updating package manager..."
 sudo apt-get update
 
 echo "[2/12] Installing required tools..."
-sudo apt-get install -y curl wget
+sudo apt-get install -y curl wget conntrack
 
 echo "[3/12] Installing Docker..."
 if ! command -v docker &> /dev/null; then
@@ -46,7 +46,9 @@ else
 fi
 
 echo "[6/12] Starting Minikube..."
-minikube start --cpus 4 --memory 4096 --driver=none
+# Clean up any existing minikube configuration
+minikube delete 2>/dev/null || true
+minikube start --cpus 4 --memory 4096 --driver=docker
 
 echo "[7/12] Setting up kubectl..."
 alias kubectl="minikube kubectl --"
