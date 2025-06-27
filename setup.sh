@@ -85,20 +85,43 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n defa
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s || echo "Prometheus ready"
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-mongodb-exporter --timeout=120s || echo "MongoDB exporter ready"
 
-echo "[12/12] Setting up external access..."
-kubectl patch svc prometheus-grafana -p '{"spec":{"type":"NodePort"}}'
-kubectl patch svc prometheus-kube-prometheus-prometheus -p '{"spec":{"type":"NodePort"}}'
-kubectl patch svc prometheus-kube-prometheus-alertmanager -p '{"spec":{"type":"NodePort"}}'
-kubectl patch svc mongodb-exporter-prometheus-mongodb-exporter -p '{"spec":{"type":"NodePort"}}'
+echo "[12/12] Setting up external access for cloud VM..."
+# Get external IP for cloud VM access
+EXTERNAL_IP=$(curl -4 -s ifconfig.me 2>/dev/null || echo "localhost")
+echo "Detected external IP: $EXTERNAL_IP"
+
+# Configure services for cloud VM access
+kubectl patch svc prometheus-grafana -p '{"spec":{"type":"LoadBalancer"}}'
+kubectl patch svc prometheus-kube-prometheus-prometheus -p '{"spec":{"type":"LoadBalancer"}}'
+kubectl patch svc prometheus-kube-prometheus-alertmanager -p '{"spec":{"type":"LoadBalancer"}}'
+kubectl patch svc mongodb-exporter-prometheus-mongodb-exporter -p '{"spec":{"type":"LoadBalancer"}}'
 
 echo ""
 echo "🎉 Setup complete!"
 echo ""
-echo "=== Access URLs ==="
-echo "Grafana: $(minikube service prometheus-grafana --url)"
-echo "Prometheus: $(minikube service prometheus-kube-prometheus-prometheus --url)"
-echo "Alertmanager: $(minikube service prometheus-kube-prometheus-alertmanager --url)"
-echo "MongoDB Exporter: $(minikube service mongodb-exporter-prometheus-mongodb-exporter --url)"
+echo "=== Cloud VM Access Instructions ==="
+echo "Your external IP: $EXTERNAL_IP"
+echo ""
+echo "1. Start minikube tunnel in a separate terminal:"
+echo "   minikube tunnel"
+echo ""
+echo "2. Wait for external IPs to be assigned, then check:"
+echo "   kubectl get svc"
+echo ""
+echo "3. Access your dashboards using the external IPs shown above"
+echo ""
+echo "=== Alternative: Port Forwarding ==="
+echo "If tunnel doesn't work, use port forwarding:"
+echo "kubectl port-forward svc/prometheus-grafana 3000:80"
+echo "kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090"
+echo "kubectl port-forward svc/prometheus-kube-prometheus-alertmanager 9093:9093"
+echo "kubectl port-forward svc/mongodb-exporter-prometheus-mongodb-exporter 9216:9216"
+echo ""
+echo "Then access via: http://$EXTERNAL_IP:3000 (Grafana)"
 echo ""
 echo "Default Grafana credentials: admin / prom-operator"
+echo ""
+echo "=== Firewall Configuration ==="
+echo "Make sure your cloud provider firewall allows traffic on ports 30000-32767"
+echo "or the specific ports shown in 'kubectl get svc'"
 echo ""
