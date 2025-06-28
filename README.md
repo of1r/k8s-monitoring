@@ -1,7 +1,5 @@
 # K8s Monitoring Lab
 
-> **Complete Kubernetes monitoring stack with Prometheus, Grafana, MongoDB, and MongoDB Exporter**
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33+-blue.svg)](https://kubernetes.io/)
 [![Prometheus](https://img.shields.io/badge/Prometheus-2.0+-orange.svg)](https://prometheus.io/)
