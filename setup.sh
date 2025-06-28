@@ -38,7 +38,7 @@ fi
 
 echo "[5/12] Installing Minikube..."
 if ! command -v minikube &> /dev/null; then
-    curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+    curl -LO  https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
     sudo install minikube-linux-amd64 /usr/local/bin/minikube
     rm minikube-linux-amd64
 else
@@ -85,16 +85,25 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n defa
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n default --timeout=180s || echo "Prometheus ready"
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-mongodb-exporter --timeout=120s || echo "MongoDB exporter ready"
 
-echo "[12/12] Setting up external access for cloud VM..."
+echo "[12/12] Setting up reliable cloud VM access..."
 # Get external IP for cloud VM access
 EXTERNAL_IP=$(curl -4 -s ifconfig.me 2>/dev/null || echo "localhost")
 echo "Detected external IP: $EXTERNAL_IP"
 
-# Configure services for cloud VM access
-kubectl patch svc prometheus-grafana -p '{"spec":{"type":"LoadBalancer"}}'
-kubectl patch svc prometheus-kube-prometheus-prometheus -p '{"spec":{"type":"LoadBalancer"}}'
-kubectl patch svc prometheus-kube-prometheus-alertmanager -p '{"spec":{"type":"LoadBalancer"}}'
-kubectl patch svc mongodb-exporter-prometheus-mongodb-exporter -p '{"spec":{"type":"LoadBalancer"}}'
+# Configure services as NodePort for reliable cloud VM access
+kubectl patch svc prometheus-grafana -p '{"spec":{"type":"NodePort"}}'
+kubectl patch svc prometheus-kube-prometheus-prometheus -p '{"spec":{"type":"NodePort"}}'
+kubectl patch svc prometheus-kube-prometheus-alertmanager -p '{"spec":{"type":"NodePort"}}'
+kubectl patch svc mongodb-exporter-prometheus-mongodb-exporter -p '{"spec":{"type":"NodePort"}}'
+
+# Wait for services to be updated
+sleep 10
+
+# Get NodePort numbers
+GRAFANA_PORT=$(kubectl get svc prometheus-grafana -o jsonpath='{.spec.ports[0].nodePort}')
+PROMETHEUS_PORT=$(kubectl get svc prometheus-kube-prometheus-prometheus -o jsonpath='{.spec.ports[0].nodePort}')
+ALERTMANAGER_PORT=$(kubectl get svc prometheus-kube-prometheus-alertmanager -o jsonpath='{.spec.ports[0].nodePort}')
+MONGODB_EXPORTER_PORT=$(kubectl get svc mongodb-exporter-prometheus-mongodb-exporter -o jsonpath='{.spec.ports[0].nodePort}')
 
 echo ""
 echo "🎉 Setup complete!"
@@ -102,26 +111,32 @@ echo ""
 echo "=== Cloud VM Access Instructions ==="
 echo "Your external IP: $EXTERNAL_IP"
 echo ""
-echo "1. Start minikube tunnel in a separate terminal:"
-echo "   minikube tunnel"
-echo ""
-echo "2. Wait for external IPs to be assigned, then check:"
-echo "   kubectl get svc"
-echo ""
-echo "3. Access your dashboards using the external IPs shown above"
-echo ""
-echo "=== Alternative: Port Forwarding ==="
-echo "If tunnel doesn't work, use port forwarding:"
-echo "kubectl port-forward svc/prometheus-grafana 3000:80"
-echo "kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090"
-echo "kubectl port-forward svc/prometheus-kube-prometheus-alertmanager 9093:9093"
-echo "kubectl port-forward svc/mongodb-exporter-prometheus-mongodb-exporter 9216:9216"
-echo ""
-echo "Then access via: http://$EXTERNAL_IP:3000 (Grafana)"
+echo "=== Direct Access URLs ==="
+echo "Grafana: http://$EXTERNAL_IP:$GRAFANA_PORT"
+echo "Prometheus: http://$EXTERNAL_IP:$PROMETHEUS_PORT"
+echo "Alertmanager: http://$EXTERNAL_IP:$ALERTMANAGER_PORT"
+echo "MongoDB Exporter: http://$EXTERNAL_IP:$MONGODB_EXPORTER_PORT"
 echo ""
 echo "Default Grafana credentials: admin / prom-operator"
 echo ""
+echo "=== Service Status ==="
+kubectl get svc | grep -E "(grafana|prometheus|alertmanager|mongodb-exporter)"
+echo ""
 echo "=== Firewall Configuration ==="
-echo "Make sure your cloud provider firewall allows traffic on ports 30000-32767"
-echo "or the specific ports shown in 'kubectl get svc'"
+echo "Make sure your cloud provider firewall allows traffic on these ports:"
+echo "- Grafana: $GRAFANA_PORT"
+echo "- Prometheus: $PROMETHEUS_PORT"
+echo "- Alertmanager: $ALERTMANAGER_PORT"
+echo "- MongoDB Exporter: $MONGODB_EXPORTER_PORT"
+echo ""
+echo "=== Test Connection ==="
+echo "Test Grafana access: curl -I http://$EXTERNAL_IP:$GRAFANA_PORT"
+echo ""
+echo "=== Troubleshooting ==="
+echo "If you can't access the dashboards:"
+echo "1. Check your cloud provider firewall settings"
+echo "2. Ensure NodePorts (30000-32767) are open in your firewall"
+echo "3. Verify minikube is running: minikube status"
+echo "4. Check service logs: kubectl logs -l app.kubernetes.io/name=grafana"
+echo "5. Restart services if needed: kubectl delete pod -l app.kubernetes.io/name=grafana"
 echo ""
