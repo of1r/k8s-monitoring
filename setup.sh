@@ -3,7 +3,7 @@ set -e
 
 echo ""
 echo "+==============================================================+"
-echo "|                    K8s Monitoring Lab Setup                  |"
+echo "|                      K8s Monitoring Lab                      |"
 echo "|              Prometheus + Grafana + MongoDB Exporter         |"
 echo "+==============================================================+"
 echo ""
