@@ -76,11 +76,7 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
   --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
   --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
   --set prometheus.prometheusSpec.ruleSelectorNilUsesHelmValues=false \
-  --set prometheus.prometheusSpec.probeSelectorNilUsesHelmValues=false \
-  --set prometheus.prometheusSpec.podMonitorNamespaceSelector={} \
-  --set prometheus.prometheusSpec.serviceMonitorNamespaceSelector={} \
-  --set prometheus.prometheusSpec.ruleNamespaceSelector={} \
-  --set prometheus.prometheusSpec.probeNamespaceSelector={}
+  --set prometheus.prometheusSpec.probeSelectorNilUsesHelmValues=false
 
 echo "[10/12] Deploying MongoDB and Exporter..."
 curl -sLO https://raw.githubusercontent.com/of1r/k8s-monitoring-lab/main/mongodb.yaml
