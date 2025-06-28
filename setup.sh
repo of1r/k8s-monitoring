@@ -92,25 +92,6 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n d
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-mongodb-exporter --timeout=120s || echo "MongoDB exporter ready"
 
 echo "[12/12] Setting up secure access and fixing Prometheus targets..."
-# Get external IP for cloud VM access
-EXTERNAL_IP=$(curl -4 -s ifconfig.me 2>/dev/null || echo "localhost")
-echo "Detected external IP: $EXTERNAL_IP"
-
-# Configure services as NodePort for reliable cloud VM access
-kubectl patch svc prometheus-grafana -p '{"spec":{"type":"NodePort"}}'
-kubectl patch svc prometheus-kube-prometheus-prometheus -p '{"spec":{"type":"NodePort"}}'
-kubectl patch svc prometheus-kube-prometheus-alertmanager -p '{"spec":{"type":"NodePort"}}'
-kubectl patch svc mongodb-exporter-prometheus-mongodb-exporter -p '{"spec":{"type":"NodePort"}}'
-
-# Wait for services to be updated
-sleep 10
-
-# Get NodePort numbers
-GRAFANA_PORT=$(kubectl get svc prometheus-grafana -o jsonpath='{.spec.ports[0].nodePort}')
-PROMETHEUS_PORT=$(kubectl get svc prometheus-kube-prometheus-prometheus -o jsonpath='{.spec.ports[0].nodePort}')
-ALERTMANAGER_PORT=$(kubectl get svc prometheus-kube-prometheus-alertmanager -o jsonpath='{.spec.ports[0].nodePort}')
-MONGODB_EXPORTER_PORT=$(kubectl get svc mongodb-exporter-prometheus-mongodb-exporter -o jsonpath='{.spec.ports[0].nodePort}')
-
 # Start port forwarding for local access
 echo "Starting port forwarding for secure access..."
 kubectl port-forward svc/prometheus-grafana 3000:80 &
@@ -124,9 +105,13 @@ sleep 5
 # Fix Minikube-specific Prometheus targets
 echo "Fixing Minikube Prometheus targets..."
 # Disable problematic ServiceMonitors that don't work in Minikube
-kubectl patch servicemonitor prometheus-kube-prometheus-kube-controller-manager -p '{"spec":{"endpoints":[]}}' || echo "Controller manager monitor not found"
-kubectl patch servicemonitor prometheus-kube-prometheus-kube-scheduler -p '{"spec":{"endpoints":[]}}' || echo "Scheduler monitor not found"
-kubectl patch servicemonitor prometheus-kube-prometheus-kube-etcd -p '{"spec":{"endpoints":[]}}' || echo "ETCD monitor not found"
+kubectl patch servicemonitor prometheus-kube-prometheus-kube-controller-manager --type='json' -p='[{"op": "replace", "path": "/spec/endpoints", "value": []}]' 2>/dev/null || echo "Controller manager monitor not found"
+kubectl patch servicemonitor prometheus-kube-prometheus-kube-scheduler --type='json' -p='[{"op": "replace", "path": "/spec/endpoints", "value": []}]' 2>/dev/null || echo "Scheduler monitor not found"
+kubectl patch servicemonitor prometheus-kube-prometheus-kube-etcd --type='json' -p='[{"op": "replace", "path": "/spec/endpoints", "value": []}]' 2>/dev/null || echo "ETCD monitor not found"
+
+# Wait for Prometheus to reload configuration
+echo "Waiting for Prometheus to reload configuration..."
+sleep 30
 
 # Verify Prometheus targets are up
 echo "Verifying Prometheus targets..."
@@ -136,10 +121,10 @@ kubectl get pods | grep -E "(prometheus|grafana|mongodb)" || echo "Some pods may
 echo ""
 echo "🎉 Setup complete!"
 echo ""
-echo "=== SECURE ACCESS VIA SSH TUNNELING (RECOMMENDED) ==="
+echo "=== SECURE ACCESS VIA SSH TUNNELING ==="
 echo "From your local machine, run this SSH command:"
 echo ""
-echo "ssh -L 3000:localhost:3000 -L 9090:localhost:9090 -L 9093:localhost:9093 -L 9216:localhost:9216 $USER@$EXTERNAL_IP"
+echo "ssh -L 3000:localhost:3000 -L 9090:localhost:9090 -L 9093:localhost:9093 -L 9216:localhost:9216 $USER@$(curl -4 -s ifconfig.me 2>/dev/null || echo 'YOUR_VM_IP')"
 echo ""
 echo "Then access your dashboards locally:"
 echo "✅ Grafana: http://localhost:3000"
@@ -148,12 +133,6 @@ echo "✅ Alertmanager: http://localhost:9093"
 echo "✅ MongoDB Exporter: http://localhost:9216"
 echo ""
 echo "Default Grafana credentials: admin / prom-operator"
-echo ""
-echo "Then access via:"
-echo "Grafana: http://$EXTERNAL_IP:$GRAFANA_PORT"
-echo "Prometheus: http://$EXTERNAL_IP:$PROMETHEUS_PORT"
-echo "Alertmanager: http://$EXTERNAL_IP:$ALERTMANAGER_PORT"
-echo "MongoDB Exporter: http://$EXTERNAL_IP:$MONGODB_EXPORTER_PORT"
 echo ""
 echo "=== Service Status ==="
 kubectl get svc | grep -E "(grafana|prometheus|alertmanager|mongodb-exporter)"
